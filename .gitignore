@@ -1,0 +1,18 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node / temporary files (if any action uses JS/TS in future)
+node_modules/
+dist/
+
+# Python cache (if any test scripts are added)
+__pycache__/
+*.py[cod]
+.venv/
