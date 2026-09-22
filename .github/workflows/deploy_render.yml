@@ -1,0 +1,230 @@
+name: Deploy to Render
+
+on:
+  workflow_call:
+    inputs:
+      service_id:
+        description: Target Render Service ID (e.g. srv-...)
+        required: true
+        type: string
+      commit_sha:
+        description: Git commit SHA to deploy (defaults to latest on connected branch if omitted)
+        required: false
+        default: ""
+        type: string
+      image_url:
+        description: Image reference URL for image-backed services
+        required: false
+        default: ""
+        type: string
+      clear_cache:
+        description: Clear build cache before deploying
+        required: false
+        default: false
+        type: boolean
+      wait_for_completion:
+        description: Whether to poll until the deploy reaches 'live' or fails
+        required: false
+        default: true
+        type: boolean
+      timeout_seconds:
+        description: Maximum seconds to poll before timing out
+        required: false
+        default: 900
+        type: number
+      poll_interval_seconds:
+        description: Seconds between status polls
+        required: false
+        default: 10
+        type: number
+    secrets:
+      render_api_key:
+        description: Render Public REST API key (Bearer token)
+        required: true
+    outputs:
+      deploy_id:
+        description: The created Render deploy ID (dep-...)
+        value: ${{ jobs.deploy.outputs.deploy_id }}
+      deploy_status:
+        description: Final deploy status (live, build_failed, etc.)
+        value: ${{ jobs.deploy.outputs.deploy_status }}
+      deploy_url:
+        description: Render Dashboard URL for this deploy
+        value: ${{ jobs.deploy.outputs.deploy_url }}
+
+jobs:
+  deploy:
+    name: Deploy to Render
+    runs-on: ubuntu-latest
+    outputs:
+      deploy_id: ${{ steps.trigger.outputs.deploy_id }}
+      deploy_status: ${{ steps.monitor.outputs.deploy_status || steps.trigger.outputs.deploy_status }}
+      deploy_url: ${{ steps.trigger.outputs.deploy_url }}
+    steps:
+      - name: Validate inputs and construct payload
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${{ inputs.service_id }}" ]; then
+            echo "::error::Input 'service_id' is required but empty."
+            exit 1
+          fi
+
+          CLEAR_CACHE_PARAM="do_not_clear"
+          if [ "${{ inputs.clear_cache }}" = "true" ]; then
+            CLEAR_CACHE_PARAM="clear"
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg clearCache "$CLEAR_CACHE_PARAM" \
+            --arg commitId "${{ inputs.commit_sha }}" \
+            --arg imageUrl "${{ inputs.image_url }}" \
+            '{clearCache: $clearCache}
+             + (if $commitId != "" then {commitId: $commitId} else {} end)
+             + (if $imageUrl != "" then {imageUrl: $imageUrl} else {} end)')
+
+          echo "Payload prepared for service ${{ inputs.service_id }}:"
+          echo "${PAYLOAD}"
+
+          {
+            echo "payload<<EOF"
+            echo "${PAYLOAD}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Trigger deployment on Render
+        id: trigger
+        shell: bash
+        env:
+          RENDER_API_KEY: ${{ secrets.render_api_key }}
+          PAYLOAD: ${{ steps.prepare.outputs.payload }}
+        run: |
+          set -euo pipefail
+
+          HTTP_RESPONSE=$(curl -sS -w "\n%{http_code}" \
+            -X POST "https://api.render.com/v1/services/${{ inputs.service_id }}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d "${PAYLOAD}")
+
+          HTTP_BODY=$(echo "${HTTP_RESPONSE}" | sed '$d')
+          HTTP_STATUS=$(echo "${HTTP_RESPONSE}" | tail -n 1)
+
+          if [ "${HTTP_STATUS}" -ne 201 ] && [ "${HTTP_STATUS}" -ne 202 ]; then
+            echo "::error::Render API rejected deploy request (HTTP ${HTTP_STATUS}): ${HTTP_BODY}"
+            exit 1
+          fi
+
+          DEPLOY_ID=$(echo "${HTTP_BODY}" | jq -r '.id // empty')
+          DEPLOY_STATUS=$(echo "${HTTP_BODY}" | jq -r '.status // empty')
+
+          if [ -z "${DEPLOY_ID}" ]; then
+            echo "::error::No deploy ID returned in Render response: ${HTTP_BODY}"
+            exit 1
+          fi
+
+          DEPLOY_URL="https://dashboard.render.com/web/${{ inputs.service_id }}/deploys/${DEPLOY_ID}"
+
+          echo "deploy_id=${DEPLOY_ID}" >> "$GITHUB_OUTPUT"
+          echo "deploy_status=${DEPLOY_STATUS}" >> "$GITHUB_OUTPUT"
+          echo "deploy_url=${DEPLOY_URL}" >> "$GITHUB_OUTPUT"
+
+          echo "🚀 Render deploy created: ${DEPLOY_ID} (status: ${DEPLOY_STATUS})"
+          echo "🔗 ${DEPLOY_URL}"
+
+      - name: Monitor deployment progress
+        id: monitor
+        if: inputs.wait_for_completion
+        shell: bash
+        env:
+          RENDER_API_KEY: ${{ secrets.render_api_key }}
+          DEPLOY_ID: ${{ steps.trigger.outputs.deploy_id }}
+          TIMEOUT: ${{ inputs.timeout_seconds }}
+          INTERVAL: ${{ inputs.poll_interval_seconds }}
+        run: |
+          set -euo pipefail
+
+          echo "⏳ Monitoring deploy ${DEPLOY_ID} (timeout: ${TIMEOUT}s, interval: ${INTERVAL}s)..."
+          START_TIME=$(date +%s)
+
+          while true; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$(( CURRENT_TIME - START_TIME ))
+
+            if [ "${ELAPSED}" -ge "${TIMEOUT}" ]; then
+              echo "::error::Deployment timed out after ${ELAPSED}s waiting for deploy ${DEPLOY_ID}."
+              echo "deploy_status=timed_out" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+
+            sleep "${INTERVAL}"
+
+            POLL_RESPONSE=$(curl -sS -w "\n%{http_code}" \
+              -X GET "https://api.render.com/v1/services/${{ inputs.service_id }}/deploys/${DEPLOY_ID}" \
+              -H "Authorization: Bearer ${RENDER_API_KEY}" \
+              -H "Accept: application/json")
+
+            POLL_BODY=$(echo "${POLL_RESPONSE}" | sed '$d')
+            POLL_CODE=$(echo "${POLL_RESPONSE}" | tail -n 1)
+
+            if [ "${POLL_CODE}" -ne 200 ]; then
+              echo "::warning::Status check returned HTTP ${POLL_CODE}: ${POLL_BODY}. Retrying..."
+              continue
+            fi
+
+            STATUS=$(echo "${POLL_BODY}" | jq -r '.status // empty')
+            ELAPSED=$(( $(date +%s) - START_TIME ))
+            echo "   [+${ELAPSED}s] Current deploy status: ${STATUS}"
+            echo "deploy_status=${STATUS}" >> "$GITHUB_OUTPUT"
+
+            case "${STATUS}" in
+              live)
+                echo "✅ Deployment is LIVE!"
+                exit 0
+                ;;
+              build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+                echo "::error::Deployment failed on Render with terminal status: '${STATUS}'."
+                exit 1
+                ;;
+              created|queued|build_in_progress|pre_deploy_in_progress|update_in_progress)
+                # In progress, continue loop
+                ;;
+              *)
+                echo "::warning::Unknown status '${STATUS}', continuing to poll..."
+                ;;
+            esac
+          done
+
+      - name: Deployment summary
+        if: always() && steps.trigger.outcome == 'success'
+        shell: bash
+        env:
+          SERVICE_ID: ${{ inputs.service_id }}
+          DEPLOY_ID: ${{ steps.trigger.outputs.deploy_id }}
+          DEPLOY_URL: ${{ steps.trigger.outputs.deploy_url }}
+          STATUS: ${{ steps.monitor.outputs.deploy_status || steps.trigger.outputs.deploy_status }}
+          COMMIT_SHA: ${{ inputs.commit_sha }}
+        run: |
+          STATUS_ICON="❓"
+          if [ "${STATUS}" = "live" ]; then
+            STATUS_ICON="✅"
+          elif [ "${STATUS}" = "build_failed" ] || [ "${STATUS}" = "update_failed" ] || [ "${STATUS}" = "timed_out" ]; then
+            STATUS_ICON="❌"
+          elif [ "${STATUS}" = "created" ] || [ "${STATUS}" = "queued" ] || [ "${STATUS}" = "update_in_progress" ]; then
+            STATUS_ICON="🚀"
+          fi
+
+          echo "### ${STATUS_ICON} Render Deployment Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Service ID** | \`${SERVICE_ID}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Deploy ID** | \`${DEPLOY_ID}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Status** | \`${STATUS}\` |" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${COMMIT_SHA}" ]; then
+            echo "| **Commit** | \`${COMMIT_SHA}\` |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "| **Dashboard** | [View on Render](${DEPLOY_URL}) |" >> "$GITHUB_STEP_SUMMARY"
