@@ -31,6 +31,26 @@ Deploys a service to Render and tracks deployment progress until it is live.
 
 ### Usage
 
+#### Zero-Boilerplate (Recommended)
+
+When using GitHub Environments, define `RENDER_SERVICE_ID` as an environment variable (under **Settings → Environments → [name] → Environment variables**) and `RENDER_API_KEY` as a repository or environment secret:
+
+```yaml
+jobs:
+  deploy:
+    name: Deploy to Render
+    uses: pesu-dev/actions/.github/workflows/deploy_render.yml@v1
+    with:
+      environment: production
+      image_url: ghcr.io/${{ github.repository }}:${{ github.sha }}
+      wait_for_completion: true
+    secrets: inherit
+```
+
+#### Explicit Parameters
+
+You can also pass `service_id` and `render_api_key` explicitly:
+
 ```yaml
 jobs:
   deploy:
@@ -39,7 +59,7 @@ jobs:
     with:
       service_id: ${{ vars.RENDER_SERVICE_ID }}
       environment: production
-      commit_sha: ${{ github.sha }}
+      image_url: ghcr.io/${{ github.repository }}:${{ github.sha }}
       wait_for_completion: true
     secrets:
       render_api_key: ${{ secrets.RENDER_API_KEY }}
@@ -49,7 +69,7 @@ jobs:
 
 | Input | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `service_id` | string | **Yes** | — | Target Render Service ID (`srv-...`). |
+| `service_id` | string | No | `""` | Target Render Service ID (`srv-...`). If omitted, falls back to `vars.RENDER_SERVICE_ID` in the targeted environment/repository. |
 | `environment` | string | No | `""` | Target GitHub Environment (e.g. `staging`, `prod`) to bind deployment protection rules and environment secrets. |
 | `commit_sha` | string | No | `""` | Specific Git commit SHA to deploy (defaults to latest on connected branch). |
 | `image_url` | string | No | `""` | Container image URL for image-backed Render services. |
@@ -62,7 +82,7 @@ jobs:
 
 | Secret | Required | Description |
 |---|---|---|
-| `render_api_key` | **Yes** | Render Public REST API Bearer token. |
+| `render_api_key` | No | Render Public REST API Bearer token. If omitted, falls back to `secrets.RENDER_API_KEY` (e.g. with `secrets: inherit`). |
 
 ### Outputs
 

@@ -4,8 +4,9 @@ on:
   workflow_call:
     inputs:
       service_id:
-        description: Target Render Service ID (e.g. srv-...)
-        required: true
+        description: Target Render Service ID (srv-...). If omitted, falls back to vars.RENDER_SERVICE_ID within the specified environment.
+        required: false
+        default: ""
         type: string
       environment:
         description: Target GitHub Environment (e.g. staging, prod) to bind deployment protection rules, reviewers, and environment secrets
@@ -44,8 +45,8 @@ on:
         type: number
     secrets:
       render_api_key:
-        description: Render Public REST API key (Bearer token)
-        required: true
+        description: Render Public REST API key (Bearer token). If omitted, falls back to secrets.RENDER_API_KEY.
+        required: false
     outputs:
       deploy_id:
         description: The created Render deploy ID (dep-...)
@@ -62,6 +63,9 @@ jobs:
     name: Deploy to Render
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || null }}
+    env:
+      RENDER_SERVICE_ID: ${{ inputs.service_id || vars.RENDER_SERVICE_ID }}
+      RENDER_API_KEY: ${{ secrets.render_api_key || secrets.RENDER_API_KEY }}
     outputs:
       deploy_id: ${{ steps.trigger.outputs.deploy_id }}
       deploy_status: ${{ steps.monitor.outputs.deploy_status || steps.trigger.outputs.deploy_status }}
@@ -73,8 +77,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${{ inputs.service_id }}" ]; then
-            echo "::error::Input 'service_id' is required but empty."
+          if [ -z "${RENDER_SERVICE_ID:-}" ]; then
+            echo "::error::Render Service ID is missing. Provide 'service_id' in with: or configure 'RENDER_SERVICE_ID' in environment/repository variables."
+            exit 1
+          fi
+
+          if [ -z "${RENDER_API_KEY:-}" ]; then
+            echo "::error::Render API key is missing. Provide 'render_api_key' in secrets: or configure 'RENDER_API_KEY' in repository secrets (with secrets: inherit)."
             exit 1
           fi
 
@@ -91,7 +100,7 @@ jobs:
              + (if $commitId != "" then {commitId: $commitId} else {} end)
              + (if $imageUrl != "" then {imageUrl: $imageUrl} else {} end)')
 
-          echo "Payload prepared for service ${{ inputs.service_id }}:"
+          echo "Payload prepared for service ${RENDER_SERVICE_ID}:"
           echo "${PAYLOAD}"
 
           {
@@ -104,13 +113,12 @@ jobs:
         id: trigger
         shell: bash
         env:
-          RENDER_API_KEY: ${{ secrets.render_api_key }}
           PAYLOAD: ${{ steps.prepare.outputs.payload }}
         run: |
           set -euo pipefail
 
           HTTP_RESPONSE=$(curl -sS -w "\n%{http_code}" \
-            -X POST "https://api.render.com/v1/services/${{ inputs.service_id }}/deploys" \
+            -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
             -H "Authorization: Bearer ${RENDER_API_KEY}" \
             -H "Accept: application/json" \
             -H "Content-Type: application/json" \
@@ -132,7 +140,7 @@ jobs:
             exit 1
           fi
 
-          DEPLOY_URL="https://dashboard.render.com/web/${{ inputs.service_id }}/deploys/${DEPLOY_ID}"
+          DEPLOY_URL="https://dashboard.render.com/web/${RENDER_SERVICE_ID}/deploys/${DEPLOY_ID}"
 
           {
             echo "deploy_id=${DEPLOY_ID}"
@@ -148,7 +156,6 @@ jobs:
         if: inputs.wait_for_completion
         shell: bash
         env:
-          RENDER_API_KEY: ${{ secrets.render_api_key }}
           DEPLOY_ID: ${{ steps.trigger.outputs.deploy_id }}
           TIMEOUT: ${{ inputs.timeout_seconds }}
           INTERVAL: ${{ inputs.poll_interval_seconds }}
@@ -171,7 +178,7 @@ jobs:
             sleep "${INTERVAL}"
 
             POLL_RESPONSE=$(curl -sS -w "\n%{http_code}" \
-              -X GET "https://api.render.com/v1/services/${{ inputs.service_id }}/deploys/${DEPLOY_ID}" \
+              -X GET "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${DEPLOY_ID}" \
               -H "Authorization: Bearer ${RENDER_API_KEY}" \
               -H "Accept: application/json")
 
@@ -210,7 +217,6 @@ jobs:
         if: always() && steps.trigger.outcome == 'success'
         shell: bash
         env:
-          SERVICE_ID: ${{ inputs.service_id }}
           ENVIRONMENT: ${{ inputs.environment }}
           DEPLOY_ID: ${{ steps.trigger.outputs.deploy_id }}
           DEPLOY_URL: ${{ steps.trigger.outputs.deploy_url }}
@@ -231,7 +237,7 @@ jobs:
             echo ""
             echo "| Field | Value |"
             echo "|---|---|"
-            echo "| **Service ID** | \`${SERVICE_ID}\` |"
+            echo "| **Service ID** | \`${RENDER_SERVICE_ID}\` |"
             if [ -n "${ENVIRONMENT}" ]; then
               echo "| **Environment** | \`${ENVIRONMENT}\` |"
             fi
