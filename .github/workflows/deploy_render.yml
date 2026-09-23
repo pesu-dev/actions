@@ -128,9 +128,11 @@ jobs:
 
           DEPLOY_URL="https://dashboard.render.com/web/${{ inputs.service_id }}/deploys/${DEPLOY_ID}"
 
-          echo "deploy_id=${DEPLOY_ID}" >> "$GITHUB_OUTPUT"
-          echo "deploy_status=${DEPLOY_STATUS}" >> "$GITHUB_OUTPUT"
-          echo "deploy_url=${DEPLOY_URL}" >> "$GITHUB_OUTPUT"
+          {
+            echo "deploy_id=${DEPLOY_ID}"
+            echo "deploy_status=${DEPLOY_STATUS}"
+            echo "deploy_url=${DEPLOY_URL}"
+          } >> "$GITHUB_OUTPUT"
 
           echo "🚀 Render deploy created: ${DEPLOY_ID} (status: ${DEPLOY_STATUS})"
           echo "🔗 ${DEPLOY_URL}"
@@ -217,14 +219,16 @@ jobs:
             STATUS_ICON="🚀"
           fi
 
-          echo "### ${STATUS_ICON} Render Deployment Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Service ID** | \`${SERVICE_ID}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Deploy ID** | \`${DEPLOY_ID}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Status** | \`${STATUS}\` |" >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "${COMMIT_SHA}" ]; then
-            echo "| **Commit** | \`${COMMIT_SHA}\` |" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "| **Dashboard** | [View on Render](${DEPLOY_URL}) |" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### ${STATUS_ICON} Render Deployment Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| **Service ID** | \`${SERVICE_ID}\` |"
+            echo "| **Deploy ID** | \`${DEPLOY_ID}\` |"
+            echo "| **Status** | \`${STATUS}\` |"
+            if [ -n "${COMMIT_SHA}" ]; then
+              echo "| **Commit** | \`${COMMIT_SHA}\` |"
+            fi
+            echo "| **Dashboard** | [View on Render](${DEPLOY_URL}) |"
+          } >> "$GITHUB_STEP_SUMMARY"
