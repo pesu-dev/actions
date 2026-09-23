@@ -7,6 +7,11 @@ on:
         description: Target Render Service ID (e.g. srv-...)
         required: true
         type: string
+      environment:
+        description: Target GitHub Environment (e.g. staging, prod) to bind deployment protection rules, reviewers, and environment secrets
+        required: false
+        default: ""
+        type: string
       commit_sha:
         description: Git commit SHA to deploy (defaults to latest on connected branch if omitted)
         required: false
@@ -56,6 +61,7 @@ jobs:
   deploy:
     name: Deploy to Render
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || null }}
     outputs:
       deploy_id: ${{ steps.trigger.outputs.deploy_id }}
       deploy_status: ${{ steps.monitor.outputs.deploy_status || steps.trigger.outputs.deploy_status }}
@@ -205,6 +211,7 @@ jobs:
         shell: bash
         env:
           SERVICE_ID: ${{ inputs.service_id }}
+          ENVIRONMENT: ${{ inputs.environment }}
           DEPLOY_ID: ${{ steps.trigger.outputs.deploy_id }}
           DEPLOY_URL: ${{ steps.trigger.outputs.deploy_url }}
           STATUS: ${{ steps.monitor.outputs.deploy_status || steps.trigger.outputs.deploy_status }}
@@ -225,6 +232,9 @@ jobs:
             echo "| Field | Value |"
             echo "|---|---|"
             echo "| **Service ID** | \`${SERVICE_ID}\` |"
+            if [ -n "${ENVIRONMENT}" ]; then
+              echo "| **Environment** | \`${ENVIRONMENT}\` |"
+            fi
             echo "| **Deploy ID** | \`${DEPLOY_ID}\` |"
             echo "| **Status** | \`${STATUS}\` |"
             if [ -n "${COMMIT_SHA}" ]; then

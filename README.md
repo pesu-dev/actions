@@ -38,6 +38,7 @@ jobs:
     uses: pesu-dev/actions/.github/workflows/deploy_render.yml@v1
     with:
       service_id: ${{ vars.RENDER_SERVICE_ID }}
+      environment: production
       commit_sha: ${{ github.sha }}
       wait_for_completion: true
     secrets:
@@ -49,6 +50,7 @@ jobs:
 | Input | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `service_id` | string | **Yes** | — | Target Render Service ID (`srv-...`). |
+| `environment` | string | No | `""` | Target GitHub Environment (e.g. `staging`, `prod`) to bind deployment protection rules and environment secrets. |
 | `commit_sha` | string | No | `""` | Specific Git commit SHA to deploy (defaults to latest on connected branch). |
 | `image_url` | string | No | `""` | Container image URL for image-backed Render services. |
 | `clear_cache` | boolean | No | `false` | Whether to clear build cache before building. |
@@ -89,7 +91,6 @@ actions/
 
 ## Future Plans
 
-- **GitHub Environments Support**: Introduce an optional `environment` input (`staging`, `prod`) to bind deployments to GitHub Environment protection rules, reviewers, and environment-scoped secrets.
 - **PR Source Checker**: Standardized check ensuring PRs originate from forks and not from a fork's `main` branch.
 - **GHCR Image Build & Push**: Reusable Docker build and push workflow with GitHub Actions caching.
 - **GHCR Retention Cleanup**: Reusable workflow to prune stale commit-sha tags in GitHub Container Registry.
