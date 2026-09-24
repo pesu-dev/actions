@@ -21,7 +21,91 @@ In `pesu-dev/actions`, **Reusable Workflows (`workflow_call`) are preferred over
 
 | Workflow | Path | Description |
 |---|---|---|
+| **Build & Push Docker Image** | [`.github/workflows/build_push_image.yml`](.github/workflows/build_push_image.yml) | Build and push Docker images to GHCR (and optionally Docker Hub) using Buildx and GitHub Actions layer caching. |
 | **Deploy to Render** | [`.github/workflows/deploy_render.yml`](.github/workflows/deploy_render.yml) | Trigger and monitor service deployments on Render via the official Render REST API v1. |
+
+---
+
+## `build_push_image.yml`
+
+Builds a Docker container image using Docker Buildx and GitHub Actions layer caching, and pushes to GitHub Container Registry (and optionally Docker Hub). Automatically sets the `GIT_SHA` build argument and generates a rich run summary.
+
+### Usage
+
+#### CI PR Validation (Build Only, No Push)
+
+Test that the Docker image builds successfully without pushing to any registry:
+
+```yaml
+jobs:
+  pr_image_build:
+    name: Build image on PR
+    uses: pesu-dev/actions/.github/workflows/build_push_image.yml@v1
+    with:
+      image_tag: ${{ github.event.pull_request.head.sha }}
+      push: false
+```
+
+#### Push to GHCR on Deploy / Push
+
+Build and push the commit image to GHCR:
+
+```yaml
+jobs:
+  build_and_push:
+    name: Build and push commit image
+    uses: pesu-dev/actions/.github/workflows/build_push_image.yml@v1
+    with:
+      ref: ${{ github.sha }}
+      image_tag: ${{ github.sha }}
+      push: true
+```
+
+#### Dual Registry Push (GHCR + Docker Hub)
+
+Pass optional Docker Hub credentials to push to both GHCR (`ghcr.io/<org>/<repo>:<tag>`) and Docker Hub (`<username>/<repo>:<tag>`):
+
+```yaml
+jobs:
+  build_and_push:
+    name: Build and push image
+    uses: pesu-dev/actions/.github/workflows/build_push_image.yml@v1
+    with:
+      ref: main
+      image_tag: ${{ steps.vars.outputs.tag }}
+      push: true
+    secrets:
+      docker_username: ${{ secrets.DOCKER_USERNAME }}
+      docker_password: ${{ secrets.DOCKER_PASSWORD }}
+```
+
+### Inputs
+
+| Input | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `image_tag` | string | **Yes** | — | Target container image tag (e.g. Git commit SHA or semver string). |
+| `ref` | string | No | `""` | Git ref to checkout (branch, tag, or SHA). Defaults to workflow trigger ref. |
+| `push` | boolean | No | `false` | Whether to push the image to container registries. |
+| `dockerfile` | string | No | `"./Dockerfile"` | Path to Dockerfile relative to repository root. |
+| `context` | string | No | `"."` | Docker build context directory path. |
+| `cache` | boolean | No | `true` | Whether to enable GitHub Actions layer cache (`type=gha`). |
+
+### Secrets
+
+| Secret | Required | Description |
+|---|---|---|
+| `docker_username` | No | Docker Hub username. If provided alongside `docker_password`, pushes to Docker Hub in addition to GHCR. |
+| `docker_password` | No | Docker Hub password or personal access token. |
+
+### Outputs
+
+| Output | Description |
+|---|---|
+| `image` | Fully qualified GHCR image name (`ghcr.io/<org>/<repo>`). |
+| `image_tag` | Built image tag. |
+| `ghcr_ref` | Complete image reference in GHCR (`ghcr.io/<org>/<repo>:<tag>`). |
+| `dockerhub_ref` | Complete image reference in Docker Hub if pushed (`<username>/<repo>:<tag>`). |
+| `digest` | Image digest (`sha256:...`). |
 
 ---
 
@@ -101,8 +185,9 @@ jobs:
 actions/
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml             # Action & workflow linting via actionlint
-│       └── deploy_render.yml  # Reusable workflow: Deploy to Render
+│       ├── build_push_image.yml # Reusable workflow: Build and Push Docker Image
+│       ├── ci.yml               # Action & workflow linting via actionlint
+│       └── deploy_render.yml    # Reusable workflow: Deploy to Render
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -113,7 +198,6 @@ actions/
 ## Future Plans
 
 - **PR Source Checker**: Standardized check ensuring PRs originate from forks and not from a fork's `main` branch.
-- **GHCR Image Build & Push**: Reusable Docker build and push workflow with GitHub Actions caching.
 - **GHCR Retention Cleanup**: Reusable workflow to prune stale commit-sha tags in GitHub Container Registry.
 
 ---
