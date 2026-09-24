@@ -91,6 +91,7 @@ jobs:
 | `deploy_id` | The created Render deploy ID (`dep-...`). |
 | `deploy_status` | Final deployment status (`live`, `build_failed`, `timed_out`, etc.). |
 | `deploy_url` | Render dashboard URL for this specific deploy. |
+| `service_url` | Public live URL of the deployed service (for web services or static sites). |
 
 ---
 
