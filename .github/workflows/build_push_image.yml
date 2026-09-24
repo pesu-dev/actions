@@ -96,34 +96,36 @@ jobs:
           GHCR_IMAGE="ghcr.io/${REPO_LOWER}"
           GHCR_REF="${GHCR_IMAGE}:${IMAGE_TAG}"
 
-          echo "image=${GHCR_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "ghcr_ref=${GHCR_REF}" >> "$GITHUB_OUTPUT"
-
           TAGS="${GHCR_REF}"
+          DOCKERHUB_REF=""
+          HAS_DOCKERHUB="false"
 
           if [ -n "${DOCKER_USER:-}" ] && [ -n "${DOCKER_PASS:-}" ]; then
             REPO_NAME="${REPOSITORY#*/}"
             REPO_NAME_LOWER=$(echo "${REPO_NAME}" | tr '[:upper:]' '[:lower:]')
             USER_LOWER=$(echo "${DOCKER_USER}" | tr '[:upper:]' '[:lower:]')
             DOCKERHUB_REF="${USER_LOWER}/${REPO_NAME_LOWER}:${IMAGE_TAG}"
-            echo "dockerhub_ref=${DOCKERHUB_REF}" >> "$GITHUB_OUTPUT"
-            echo "has_dockerhub=true" >> "$GITHUB_OUTPUT"
+            HAS_DOCKERHUB="true"
             TAGS="${TAGS},${DOCKERHUB_REF}"
-          else
-            echo "dockerhub_ref=" >> "$GITHUB_OUTPUT"
-            echo "has_dockerhub=false" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
-
+          CACHE_FROM=""
+          CACHE_TO=""
           if [ "${ENABLE_CACHE}" = "true" ]; then
-            echo "cache_from=type=gha" >> "$GITHUB_OUTPUT"
-            echo "cache_to=type=gha,mode=max" >> "$GITHUB_OUTPUT"
-          else
-            echo "cache_from=" >> "$GITHUB_OUTPUT"
-            echo "cache_to=" >> "$GITHUB_OUTPUT"
+            CACHE_FROM="type=gha"
+            CACHE_TO="type=gha,mode=max"
           fi
+
+          {
+            echo "image=${GHCR_IMAGE}"
+            echo "image_tag=${IMAGE_TAG}"
+            echo "ghcr_ref=${GHCR_REF}"
+            echo "dockerhub_ref=${DOCKERHUB_REF}"
+            echo "has_dockerhub=${HAS_DOCKERHUB}"
+            echo "tags=${TAGS}"
+            echo "cache_from=${CACHE_FROM}"
+            echo "cache_to=${CACHE_TO}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         if: inputs.push
