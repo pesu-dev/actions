@@ -157,6 +157,7 @@ jobs:
             GIT_SHA=${{ inputs.image_tag }}
           cache-from: ${{ steps.meta.outputs.cache_from }}
           cache-to: ${{ steps.meta.outputs.cache_to }}
+          provenance: false
 
       - name: Build summary
         if: always() && steps.build.outcome == 'success'
