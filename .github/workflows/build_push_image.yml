@@ -7,6 +7,11 @@ on:
         description: Target image tag (e.g. Git commit SHA or version string)
         required: true
         type: string
+      image_name:
+        description: Custom image/package name (e.g. 'pesu-auth'). Defaults to repository name if omitted.
+        required: false
+        default: ""
+        type: string
       ref:
         description: Git reference to checkout (branch, tag, or SHA). Defaults to default ref if omitted.
         required: false
@@ -41,7 +46,7 @@ on:
         required: false
     outputs:
       image:
-        description: Fully qualified GHCR image name (ghcr.io/org/repo)
+        description: Fully qualified GHCR image name (ghcr.io/org/repo or ghcr.io/org/image_name)
         value: ${{ jobs.build.outputs.image }}
       image_tag:
         description: Built image tag
@@ -88,12 +93,21 @@ jobs:
           DOCKER_PASS: ${{ secrets.docker_password }}
           REPOSITORY: ${{ github.repository }}
           IMAGE_TAG: ${{ inputs.image_tag }}
+          CUSTOM_IMAGE_NAME: ${{ inputs.image_name }}
           ENABLE_CACHE: ${{ inputs.cache }}
         run: |
           set -euo pipefail
 
-          REPO_LOWER=$(echo "${REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          GHCR_IMAGE="ghcr.io/${REPO_LOWER}"
+          # Resolve package/image name: custom override or repository name fallback
+          PACKAGE_NAME="${CUSTOM_IMAGE_NAME:-}"
+          if [ -z "${PACKAGE_NAME}" ]; then
+            PACKAGE_NAME="${REPOSITORY#*/}"
+          fi
+
+          PACKAGE_NAME_LOWER=$(echo "${PACKAGE_NAME}" | tr '[:upper:]' '[:lower:]')
+          ORG_LOWER=$(echo "${REPOSITORY%/*}" | tr '[:upper:]' '[:lower:]')
+
+          GHCR_IMAGE="ghcr.io/${ORG_LOWER}/${PACKAGE_NAME_LOWER}"
           GHCR_REF="${GHCR_IMAGE}:${IMAGE_TAG}"
 
           TAGS="${GHCR_REF}"
@@ -101,10 +115,8 @@ jobs:
           HAS_DOCKERHUB="false"
 
           if [ -n "${DOCKER_USER:-}" ] && [ -n "${DOCKER_PASS:-}" ]; then
-            REPO_NAME="${REPOSITORY#*/}"
-            REPO_NAME_LOWER=$(echo "${REPO_NAME}" | tr '[:upper:]' '[:lower:]')
             USER_LOWER=$(echo "${DOCKER_USER}" | tr '[:upper:]' '[:lower:]')
-            DOCKERHUB_REF="${USER_LOWER}/${REPO_NAME_LOWER}:${IMAGE_TAG}"
+            DOCKERHUB_REF="${USER_LOWER}/${PACKAGE_NAME_LOWER}:${IMAGE_TAG}"
             HAS_DOCKERHUB="true"
             TAGS="${TAGS},${DOCKERHUB_REF}"
           fi

@@ -79,11 +79,28 @@ jobs:
       docker_password: ${{ secrets.DOCKER_PASSWORD }}
 ```
 
+#### Custom Image / Package Name
+
+Specify `image_name` if the published container package name on GHCR and Docker Hub differs from the GitHub repository name:
+
+```yaml
+jobs:
+  build_and_push:
+    name: Build and push image
+    uses: pesu-dev/actions/.github/workflows/build_push_image.yml@v1
+    with:
+      ref: main
+      image_name: pesu-auth
+      image_tag: ${{ github.sha }}
+      push: true
+```
+
 ### Inputs
 
 | Input | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `image_tag` | string | **Yes** | — | Target container image tag (e.g. Git commit SHA or semver string). |
+| `image_name` | string | No | `""` | Custom image/package name (e.g. `pesu-auth`). Defaults to repository name if omitted. |
 | `ref` | string | No | `""` | Git ref to checkout (branch, tag, or SHA). Defaults to workflow trigger ref. |
 | `push` | boolean | No | `false` | Whether to push the image to container registries. |
 | `dockerfile` | string | No | `"./Dockerfile"` | Path to Dockerfile relative to repository root. |
@@ -101,7 +118,7 @@ jobs:
 
 | Output | Description |
 |---|---|
-| `image` | Fully qualified GHCR image name (`ghcr.io/<org>/<repo>`). |
+| `image` | Fully qualified GHCR image name (`ghcr.io/<org>/<repo>` or `ghcr.io/<org>/<image_name>`). |
 | `image_tag` | Built image tag. |
 | `ghcr_ref` | Complete image reference in GHCR (`ghcr.io/<org>/<repo>:<tag>`). |
 | `dockerhub_ref` | Complete image reference in Docker Hub if pushed (`<username>/<repo>:<tag>`). |
