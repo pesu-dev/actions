@@ -37,6 +37,11 @@ on:
         required: false
         default: true
         type: boolean
+      platforms:
+        description: Target container architectures (comma-separated, e.g. 'linux/amd64,linux/arm64'). Defaults to native runner architecture if omitted.
+        required: false
+        default: ""
+        type: string
     secrets:
       docker_username:
         description: Docker Hub username (optional; if omitted or empty, Docker Hub push is skipped)
@@ -60,6 +65,9 @@ on:
       digest:
         description: Container image digest (sha256:...)
         value: ${{ jobs.build.outputs.digest }}
+      platforms:
+        description: Target container architectures built
+        value: ${{ jobs.build.outputs.platforms }}
 
 jobs:
   build:
@@ -74,6 +82,7 @@ jobs:
       ghcr_ref: ${{ steps.meta.outputs.ghcr_ref }}
       dockerhub_ref: ${{ steps.meta.outputs.dockerhub_ref }}
       digest: ${{ steps.build.outputs.digest }}
+      platforms: ${{ inputs.platforms }}
     steps:
       - name: Checkout repository at provided ref
         if: inputs.ref != ''
@@ -154,6 +163,10 @@ jobs:
           username: ${{ secrets.docker_username }}
           password: ${{ secrets.docker_password }}
 
+      - name: Set up QEMU
+        if: inputs.platforms != ''
+        uses: docker/setup-qemu-action@v4
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -163,6 +176,7 @@ jobs:
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
+          platforms: ${{ inputs.platforms }}
           push: ${{ inputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
@@ -180,6 +194,7 @@ jobs:
           GHCR_REF: ${{ steps.meta.outputs.ghcr_ref }}
           DOCKERHUB_REF: ${{ steps.meta.outputs.dockerhub_ref }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          PLATFORMS: ${{ inputs.platforms }}
         run: |
           ACTION_LABEL="Built"
           STATUS_ICON="🛠️"
@@ -194,6 +209,7 @@ jobs:
             echo "| Field | Value |"
             echo "|---|---|"
             echo "| **Tag** | \`${IMAGE_TAG}\` |"
+            echo "| **Platforms** | \`${PLATFORMS:-native}\` |"
             echo "| **Pushed** | \`${PUSH}\` |"
             echo "| **GHCR Target** | \`${GHCR_REF}\` |"
             if [ -n "${DOCKERHUB_REF}" ]; then

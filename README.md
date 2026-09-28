@@ -95,6 +95,25 @@ jobs:
       push: true
 ```
 
+#### Multi-Platform Build (e.g. AMD64 + ARM64)
+
+Publish multi-architecture container images (e.g. for Apple Silicon developers and ARM64 cloud instances like AWS Graviton) using QEMU emulation:
+
+```yaml
+jobs:
+  build_and_push:
+    name: Build and push multi-arch image
+    uses: pesu-dev/actions/.github/workflows/build_push_image.yml@v1
+    with:
+      ref: main
+      image_name: pesu-auth
+      image_tag: ${{ steps.vars.outputs.tag }}
+      platforms: linux/amd64,linux/arm64
+      push: true
+```
+
+> **Performance Tip**: Emulating ARM64 on x86 GitHub runners via QEMU incurs compilation overhead. For PR validation, omit `platforms` to validate builds rapidly on native runner architecture; enable `platforms` when building release images on push or tag.
+
 ### Inputs
 
 | Input | Type | Required | Default | Description |
@@ -106,6 +125,7 @@ jobs:
 | `dockerfile` | string | No | `"./Dockerfile"` | Path to Dockerfile relative to repository root. |
 | `context` | string | No | `"."` | Docker build context directory path. |
 | `cache` | boolean | No | `true` | Whether to enable GitHub Actions layer cache (`type=gha`). |
+| `platforms` | string | No | `""` | Target container architectures (comma-separated, e.g. `linux/amd64,linux/arm64`). Defaults to native runner arch (`linux/amd64`). Automatically sets up QEMU when provided. |
 
 ### Secrets
 
@@ -123,6 +143,7 @@ jobs:
 | `ghcr_ref` | Complete image reference in GHCR (`ghcr.io/<org>/<repo>:<tag>`). |
 | `dockerhub_ref` | Complete image reference in Docker Hub if pushed (`<username>/<repo>:<tag>`). |
 | `digest` | Image digest (`sha256:...`). |
+| `platforms` | Target container architectures built. |
 
 ---
 
