@@ -19,3 +19,35 @@ jobs:
         with:
           fail_level: error
           filter_mode: nofilter
+
+  # PRs come from a branch of this repository, never a fork or main, and target main
+  validate-pr-origin:
+    name: Validate PR origin
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      SOURCE_BRANCH: ${{ github.event.pull_request.head.ref }}
+      TARGET_REPO: ${{ github.repository }}
+      TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
+    steps:
+      - name: Validate PR origin and target branch
+        run: |
+          echo "PR #${{ github.event.pull_request.number }}: ${SOURCE_REPO}:${SOURCE_BRANCH} -> ${TARGET_REPO}:${TARGET_BRANCH}"
+
+          if [ "$SOURCE_REPO" != "$TARGET_REPO" ]; then
+            echo "::error::PR comes from the fork $SOURCE_REPO. Push your branch to $TARGET_REPO and open the PR from there."
+            exit 1
+          fi
+
+          if [ "$SOURCE_BRANCH" = "main" ]; then
+            echo "::error::PR cannot come from the 'main' branch. Create a branch for your change."
+            exit 1
+          fi
+
+          if [ "$TARGET_BRANCH" != "main" ]; then
+            echo "::error::PR must target the 'main' branch."
+            exit 1
+          fi
+
+          echo "✅ PR passed origin and target branch checks."
