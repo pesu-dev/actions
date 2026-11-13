@@ -224,7 +224,7 @@ actions/
 ├── .github/
 │   └── workflows/
 │       ├── build_push_image.yml # Reusable workflow: Build and Push Docker Image
-│       ├── ci.yml               # Action & workflow linting via actionlint
+│       ├── ci.yml               # Workflow linting via actionlint, and the PR origin check
 │       └── deploy_render.yml    # Reusable workflow: Deploy to Render
 ├── .gitignore
 ├── LICENSE
@@ -235,8 +235,17 @@ actions/
 
 ## Future Plans
 
-- **PR Source Checker**: Standardized check ensuring PRs originate from forks and not from a fork's `main` branch.
+- **PR Source Checker**: Standardized check ensuring PRs come from a branch of the same repository (not a fork) other than `dev` or `main`, and target the right base branch.
 - **GHCR Retention Cleanup**: Reusable workflow to prune stale commit-sha tags in GitHub Container Registry.
+
+---
+
+## Contributing
+
+Clone this repository itself (`git clone https://github.com/pesu-dev/actions.git`), push your change to a branch of your
+own (not `main`), and open a pull request from it to `main`. Forks are not accepted: CI's PR origin check fails them.
+Pushing branches needs write access; ask the maintainers on PESU Discord. Once a change is merged, the maintainers tag
+the release and move the major version tag.
 
 ---
 
